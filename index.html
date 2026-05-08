@@ -160,7 +160,7 @@ html, body { height: 100%; font-family: var(--font-body); background: var(--bg);
 /* ===== FORMS ===== */
 .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; color: white; }
 .form-group label { font-size: 12px; font-weight: 600; letter-spacing: 0.5px; color: white; text-transform: uppercase; }
-input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, textarea { width: 100%; padding: 11px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 15px; color: var(--black); background: var(--white); transition: border-color var(--transition), box-shadow var(--transition); }
+input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, textarea { width: 100%; padding: 11px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 15px; color: var(--black); transition: border-color var(--transition), box-shadow var(--transition); }
 input:focus, select:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(27,107,47,0.12); }
 input::placeholder { color: var(--gray-400); }
 .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
@@ -308,7 +308,7 @@ input:-webkit-autofill:active {
       </div>
       <div class="form-group">
         <label>Senha</label>
-        <input type="password" id="login-senha" placeholder="••••••••" autocomplete="current-password"/>
+        <input style="color: white;"  type="password" id="login-senha" placeholder="••••••••" autocomplete="current-password"/>
       </div>
       <button class="btn btn-gold btn-full" id="btn-login">Entrar</button>
       <p class="login-footer">Elite Distribuidora © 2025</p>
