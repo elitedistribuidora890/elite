@@ -809,11 +809,69 @@ input:-webkit-autofill:active {
         </div>
       </div>
 
-      <!-- Tabs Dia / Semana / Mês -->
-      <div class="tabs" style="margin-bottom:20px">
-        <button class="tab-btn active" onclick="switchTabRelatorio('dia',this)">📅 Hoje</button>
-        <button class="tab-btn" onclick="switchTabRelatorio('semana',this)">🗓 Esta Semana</button>
-        <button class="tab-btn" onclick="switchTabRelatorio('mes',this)">📆 Este Mês</button>
+      <!-- Tabs Dia / Semana / Mês / Filtro -->
+      <div class="tabs" style="margin-bottom:12px">
+        <button class="tab-btn active" id="rel-tab-dia" onclick="switchTabRelatorio('dia',this)">📅 Hoje</button>
+        <button class="tab-btn" id="rel-tab-semana" onclick="switchTabRelatorio('semana',this)">🗓 Esta Semana</button>
+        <button class="tab-btn" id="rel-tab-mes" onclick="switchTabRelatorio('mes',this)">📆 Este Mês</button>
+        <button class="tab-btn" id="rel-tab-filtro" onclick="switchTabRelatorio('filtro',this)">🔍 Filtrar Mês</button>
+        <button class="tab-btn" id="rel-tab-anual" onclick="switchTabRelatorio('anual',this)">📊 Ver por Meses</button>
+      </div>
+      <!-- Seletor de mês/ano — visível só quando tab filtro está ativa -->
+      <div id="rel-filtro-mes-wrap" style="display:none;margin-bottom:16px;background:var(--white);border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);padding:14px;align-items:center;gap:12px;flex-wrap:wrap">
+        <label style="font-size:13px;font-weight:600;color:var(--gray-600)">Selecionar mês:</label>
+        <select id="rel-filtro-mes" onchange="carregarRelatorios()" style="padding:9px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-body)">
+          <option value="0">Janeiro</option>
+          <option value="1">Fevereiro</option>
+          <option value="2">Março</option>
+          <option value="3">Abril</option>
+          <option value="4">Maio</option>
+          <option value="5">Junho</option>
+          <option value="6">Julho</option>
+          <option value="7">Agosto</option>
+          <option value="8">Setembro</option>
+          <option value="9">Outubro</option>
+          <option value="10">Novembro</option>
+          <option value="11">Dezembro</option>
+        </select>
+        <select id="rel-filtro-ano" onchange="carregarRelatorios()" style="padding:9px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-body)">
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="imprimirRelatorioMes()">🖨️ Imprimir Mês</button>
+        <button class="btn btn-outline btn-sm" onclick="exportarExcelMes()">📥 Exportar Excel</button>
+      </div>
+
+      <!-- Visão anual — visível só quando tab anual está ativa -->
+      <div id="rel-anual-wrap" style="display:none;margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+          <label style="font-size:13px;font-weight:600;color:var(--gray-600)">Ano:</label>
+          <select id="rel-anual-ano" onchange="carregarRelatorioAnual()" style="padding:9px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-body)"></select>
+          <button class="btn btn-outline btn-sm" onclick="exportarExcelAnual()">&#128229; Exportar Ano Excel</button>
+        </div>
+        <div class="card">
+          <div class="card-header" id="rel-anual-titulo">Resumo por M&#234;s</div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>M&#234;s</th>
+                  <th>N&#186; Vendas</th>
+                  <th>Total Vendido</th>
+                  <th>Total Lucro</th>
+                  <th>A&#231;&#245;es</th>
+                </tr>
+              </thead>
+              <tbody id="rel-anual-tbody">
+                <tr><td colspan="5" class="empty-text">Carregando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-weight:700;padding:12px 14px;border-top:2px solid var(--gray-200);font-size:15px">
+            <span>TOTAL DO ANO</span>
+            <span id="rel-anual-total-geral">R$ 0,00</span>
+            <span id="rel-anual-lucro-geral">R$ 0,00</span>
+            <span></span>
+          </div>
+        </div>
       </div>
 
       <div class="card mt-16">
@@ -2208,11 +2266,49 @@ async function salvarUsuario() {
 // =====================================================
 let relPeriodo = 'dia';
 
+function preencherAnosSelect(selectId) {
+  const sel = document.getElementById(selectId);
+  if (sel.options.length) return;
+  const anoAtual = new Date().getFullYear();
+  for (let a = anoAtual; a >= anoAtual - 5; a--) {
+    const opt = document.createElement('option');
+    opt.value = a; opt.textContent = a;
+    sel.appendChild(opt);
+  }
+  sel.value = anoAtual;
+}
+
 function switchTabRelatorio(periodo, btn) {
   relPeriodo = periodo;
   document.querySelectorAll('#page-relatorios .tab-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const titulos = { dia: 'Vendas do Dia', semana: 'Vendas desta Semana', mes: 'Vendas deste Mês' };
+
+  const filtroWrap = document.getElementById('rel-filtro-mes-wrap');
+  const anualWrap = document.getElementById('rel-anual-wrap');
+  const tabelaVendas = document.querySelector('#page-relatorios .card.mt-16');
+  const tabelaFiado = document.querySelectorAll('#page-relatorios .card.mt-16')[1];
+
+  filtroWrap.style.display = 'none';
+  anualWrap.style.display = 'none';
+
+  if (periodo === 'filtro') {
+    filtroWrap.style.display = 'flex';
+    preencherAnosSelect('rel-filtro-ano');
+    const agora = new Date();
+    document.getElementById('rel-filtro-mes').value = agora.getMonth();
+  } else if (periodo === 'anual') {
+    anualWrap.style.display = 'block';
+    preencherAnosSelect('rel-anual-ano');
+    carregarRelatorioAnual();
+    return;
+  }
+
+  const titulos = {
+    dia: 'Vendas do Dia',
+    semana: 'Vendas desta Semana',
+    mes: 'Vendas deste Mês',
+    filtro: 'Vendas do Mês Filtrado'
+  };
   document.getElementById('rel-periodo-titulo').textContent = titulos[periodo] || 'Vendas';
   carregarRelatorios();
 }
@@ -2228,6 +2324,14 @@ async function carregarRelatorios() {
     const diasParaSegunda = diaSemana === 0 ? 6 : diaSemana - 1;
     ini = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - diasParaSegunda);
     fim = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + 1);
+  } else if (relPeriodo === 'filtro') {
+    const mesSel = parseInt(document.getElementById('rel-filtro-mes')?.value ?? hoje.getMonth());
+    const anoSel = parseInt(document.getElementById('rel-filtro-ano')?.value ?? hoje.getFullYear());
+    ini = new Date(anoSel, mesSel, 1);
+    fim = new Date(anoSel, mesSel + 1, 1);
+    // Atualiza título com mês selecionado
+    const mesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    document.getElementById('rel-periodo-titulo').textContent = `Vendas de ${mesNomes[mesSel]} / ${anoSel}`;
   } else { // mes
     ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
@@ -2326,7 +2430,12 @@ async function imprimirResumoDia() {
   let html = `<div style="text-align:center;font-family:'Courier New',monospace;font-size:12px;line-height:1.6;color:#000">`;
   if (cfgLogoBase64) html += `<div><img src="${cfgLogoBase64}" style="max-width:120px;max-height:60px;display:block;margin:0 auto 4px"/></div>`;
   html += `<div style="font-size:14px;font-weight:bold">${cfg.nome || 'ELITE DISTRIBUIDORA'}</div>`;
+  if (cfg.slogan) html += `<div style="font-size:11px">${cfg.slogan}</div>`;
   html += `<div>${L}</div>`;
+  if (cfg.cnpj) html += `<div>CNPJ: ${cfg.cnpj}</div>`;
+  if (cfg.telefone) html += `<div>Tel: ${cfg.telefone}</div>`;
+  if (cfg.endereco) html += `<div>${cfg.endereco}</div>`;
+  if (cfg.cnpj || cfg.telefone || cfg.endereco) html += `<div>${l}</div>`;
   html += `<div style="font-weight:bold">RESUMO DO DIA – ${data}</div>`;
   html += `<div>Impresso: ${hora}</div>`;
   html += `<div>${l}</div>`;
@@ -2371,9 +2480,206 @@ async function exportarExcel() {
   XLSX.writeFile(wb, `relatorio_${hoje.toISOString().slice(0,10)}.xlsx`);
 }
 
+
 // =====================================================
-// ENTREGA / RESGATE
+// RELATÓRIO ANUAL — VER POR MESES
 // =====================================================
+const MES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+async function carregarRelatorioAnual() {
+  const anoSel = parseInt(document.getElementById('rel-anual-ano')?.value ?? new Date().getFullYear());
+  const tbody = document.getElementById('rel-anual-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="empty-text">Buscando dados...</td></tr>';
+  document.getElementById('rel-anual-titulo').textContent = `Resumo por Mês — ${anoSel}`;
+
+  const ini = new Date(anoSel, 0, 1);
+  const fim = new Date(anoSel + 1, 0, 1);
+
+  try {
+    const snap = await db.collection('vendas')
+      .where('criadoEm', '>=', firebase.firestore.Timestamp.fromDate(ini))
+      .where('criadoEm', '<', firebase.firestore.Timestamp.fromDate(fim))
+      .orderBy('criadoEm', 'asc').get();
+
+    // Agrupar por mês
+    const meses = Array.from({length:12}, () => ({ qtd:0, total:0, lucro:0 }));
+    snap.forEach(d => {
+      const v = d.data();
+      const mes = v.criadoEm?.toDate?.()?.getMonth();
+      if (mes !== undefined && mes >= 0 && mes <= 11) {
+        meses[mes].qtd++;
+        meses[mes].total += v.total || 0;
+        meses[mes].lucro += v.lucro || 0;
+      }
+    });
+
+    let totalAno = 0, lucroAno = 0;
+    const rows = meses.map((m, i) => {
+      totalAno += m.total;
+      lucroAno += m.lucro;
+      const isMesAtual = (new Date().getFullYear() === anoSel && new Date().getMonth() === i);
+      const style = isMesAtual ? 'background:rgba(27,107,47,0.06);font-weight:600' : '';
+      const vazio = m.qtd === 0 ? 'color:var(--gray-400)' : '';
+      return `<tr style="${style}">
+        <td style="${vazio}">${isMesAtual ? '▶ ' : ''}${MES_NOMES[i]}</td>
+        <td style="${vazio}">${m.qtd || '—'}</td>
+        <td style="font-weight:${m.total?'700':'400'};${vazio}">${m.total ? formatBRL(m.total) : '—'}</td>
+        <td style="color:${m.lucro?'var(--success)':'var(--gray-400)'}">${m.lucro ? formatBRL(m.lucro) : '—'}</td>
+        <td>
+          ${m.qtd > 0 ? `<button class="btn btn-sm btn-outline" onclick="verMesDetalhe(${i},${anoSel})">Ver detalhes</button>` : ''}
+        </td>
+      </tr>`;
+    });
+
+    tbody.innerHTML = rows.join('');
+    document.getElementById('rel-anual-total-geral').textContent = formatBRL(totalAno);
+    document.getElementById('rel-anual-lucro-geral').textContent = formatBRL(lucroAno);
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-text">Erro ao carregar: ${e.message}</td></tr>`;
+  }
+}
+
+function verMesDetalhe(mes, ano) {
+  // Ir para aba filtro com o mês/ano selecionado
+  const btnFiltro = document.getElementById('rel-tab-filtro');
+  document.getElementById('rel-anual-wrap').style.display = 'none';
+  switchTabRelatorio('filtro', btnFiltro);
+  preencherAnosSelect('rel-filtro-ano');
+  document.getElementById('rel-filtro-mes').value = mes;
+  document.getElementById('rel-filtro-ano').value = ano;
+  carregarRelatorios();
+}
+
+async function exportarExcelAnual() {
+  const anoSel = parseInt(document.getElementById('rel-anual-ano')?.value ?? new Date().getFullYear());
+  const ini = new Date(anoSel, 0, 1);
+  const fim = new Date(anoSel + 1, 0, 1);
+
+  const snap = await db.collection('vendas')
+    .where('criadoEm', '>=', firebase.firestore.Timestamp.fromDate(ini))
+    .where('criadoEm', '<', firebase.firestore.Timestamp.fromDate(fim))
+    .orderBy('criadoEm', 'asc').get();
+
+  // Aba resumo mensal
+  const meses = Array.from({length:12}, () => ({ qtd:0, total:0, lucro:0 }));
+  const detalhe = [['Data/Hora','Mês','Cliente','Pagamento','Total','Lucro','Itens']];
+
+  snap.forEach(d => {
+    const v = d.data();
+    const dt = v.criadoEm?.toDate?.();
+    const mes = dt?.getMonth();
+    if (mes !== undefined) {
+      meses[mes].qtd++;
+      meses[mes].total += v.total || 0;
+      meses[mes].lucro += v.lucro || 0;
+    }
+    const itens = (v.itens||[]).map(i=>`${i.nome} x${i.qty}`).join(', ');
+    detalhe.push([dt ? dt.toLocaleString('pt-BR') : '', MES_NOMES[mes??0], v.cliente||'', v.pagamento||'', v.total||0, v.lucro||0, itens]);
+  });
+
+  const resumo = [['Mês','Nº Vendas','Total Vendido','Total Lucro'],
+    ...meses.map((m,i) => [MES_NOMES[i], m.qtd, m.total, m.lucro])
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumo), 'Resumo Mensal');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalhe), 'Todas as Vendas');
+  XLSX.writeFile(wb, `relatorio_anual_${anoSel}.xlsx`);
+}
+
+// =====================================================
+// IMPRIMIR / EXPORTAR RELATÓRIO MÊS FILTRADO
+// =====================================================
+async function imprimirRelatorioMes() {
+  const mesSel = parseInt(document.getElementById('rel-filtro-mes')?.value ?? new Date().getMonth());
+  const anoSel = parseInt(document.getElementById('rel-filtro-ano')?.value ?? new Date().getFullYear());
+  const ini = new Date(anoSel, mesSel, 1);
+  const fim = new Date(anoSel, mesSel + 1, 1);
+  const mesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  const snap = await db.collection('vendas')
+    .where('criadoEm', '>=', firebase.firestore.Timestamp.fromDate(ini))
+    .where('criadoEm', '<', firebase.firestore.Timestamp.fromDate(fim)).get();
+
+  const prodMap = {};
+  let totalGeral = 0, totalLucro = 0;
+  snap.forEach(d => {
+    const v = d.data();
+    totalGeral += v.total || 0;
+    totalLucro += v.lucro || 0;
+    (v.itens || []).forEach(item => {
+      if (!prodMap[item.nome]) prodMap[item.nome] = { qty: 0, total: 0 };
+      prodMap[item.nome].qty += item.qty;
+      prodMap[item.nome].total += item.preco * item.qty;
+    });
+  });
+
+  carregarConfig();
+  const cfg = cfgLoja;
+  const L = '================================';
+  const l = '--------------------------------';
+  const agora = new Date();
+  const dataImpressao = agora.toLocaleDateString('pt-BR');
+  const horaImpressao = agora.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+
+  let html = `<div style="text-align:center;font-family:'Courier New',monospace;font-size:12px;line-height:1.6;color:#000">`;
+  if (cfgLogoBase64) html += `<div><img src="${cfgLogoBase64}" style="max-width:120px;max-height:60px;display:block;margin:0 auto 4px"/></div>`;
+  html += `<div style="font-size:14px;font-weight:bold">${cfg.nome || 'ELITE DISTRIBUIDORA'}</div>`;
+  if (cfg.slogan) html += `<div style="font-size:11px">${cfg.slogan}</div>`;
+  html += `<div>${L}</div>`;
+  if (cfg.cnpj) html += `<div>CNPJ: ${cfg.cnpj}</div>`;
+  if (cfg.telefone) html += `<div>Tel: ${cfg.telefone}</div>`;
+  if (cfg.endereco) html += `<div>${cfg.endereco}</div>`;
+  if (cfg.cnpj || cfg.telefone || cfg.endereco) html += `<div>${l}</div>`;
+  html += `<div style="font-weight:bold">RELATÓRIO – ${mesNomes[mesSel].toUpperCase()} / ${anoSel}</div>`;
+  html += `<div>Impresso: ${dataImpressao} ${horaImpressao}</div>`;
+  html += `<div>${l}</div>`;
+  html += `<div style="text-align:left">`;
+  html += `<div style="display:flex;justify-content:space-between;font-weight:bold"><span>PRODUTO</span><span>QTD&nbsp;&nbsp;TOTAL</span></div>`;
+  html += `<div>${l}</div>`;
+  Object.entries(prodMap).sort((a,b) => b[1].qty - a[1].qty).forEach(([nome, info]) => {
+    const nomeCurto = nome.length > 20 ? nome.substring(0,20) : nome;
+    html += `<div style="display:flex;justify-content:space-between"><span>${nomeCurto}</span><span>${info.qty}x&nbsp;${formatBRL(info.total)}</span></div>`;
+  });
+  html += `<div>${l}</div>`;
+  html += `<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px"><span>TOTAL GERAL</span><span>${formatBRL(totalGeral)}</span></div>`;
+  html += `<div style="display:flex;justify-content:space-between"><span>Lucro Total</span><span>${formatBRL(totalLucro)}</span></div>`;
+  html += `<div style="font-size:11px;text-align:center">Total de vendas: ${snap.size}</div>`;
+  html += `</div>`;
+  html += `<div>${L}</div>`;
+  html += `<div style="font-size:11px">${cfg.rodape || 'Obrigado pela preferência!'}</div>`;
+  html += `</div>`;
+
+  document.getElementById('cupom-80mm').innerHTML = html;
+  document.getElementById('modal-cupom').classList.remove('hidden');
+}
+
+async function exportarExcelMes() {
+  const mesSel = parseInt(document.getElementById('rel-filtro-mes')?.value ?? new Date().getMonth());
+  const anoSel = parseInt(document.getElementById('rel-filtro-ano')?.value ?? new Date().getFullYear());
+  const ini = new Date(anoSel, mesSel, 1);
+  const fim = new Date(anoSel, mesSel + 1, 1);
+  const mesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  const snap = await db.collection('vendas')
+    .where('criadoEm', '>=', firebase.firestore.Timestamp.fromDate(ini))
+    .where('criadoEm', '<', firebase.firestore.Timestamp.fromDate(fim)).get();
+
+  const dados = [['Data/Hora', 'Cliente', 'Pagamento', 'Total', 'Lucro', 'Itens', 'Obs']];
+  snap.forEach(d => {
+    const v = d.data();
+    const dataHora = v.criadoEm?.toDate?.() ? v.criadoEm.toDate().toLocaleString('pt-BR') : '';
+    const itens = (v.itens || []).map(i => `${i.nome} x${i.qty}`).join(', ');
+    const obs2 = [v.litrinho ? 'Litrinho' : '', v.cooler ? 'Cooler' : ''].filter(Boolean).join(', ');
+    dados.push([dataHora, v.cliente || '', v.pagamento || '', v.total || 0, v.lucro || 0, itens, obs2]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(dados);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `${mesNomes[mesSel]} ${anoSel}`);
+  XLSX.writeFile(wb, `relatorio_${mesNomes[mesSel].toLowerCase()}_${anoSel}.xlsx`);
+}
+
+
 function carregarEntregas() {
   db.collection('entregas').orderBy('criadoEm', 'desc').onSnapshot(snap => {
     todasEntregas = [];
