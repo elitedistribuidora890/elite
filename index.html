@@ -1788,18 +1788,23 @@ async function finalizarVenda() {
     if (pag === 'fiado' && cliente) {
       const fiadoRef = db.collection('fiado').doc(cliente.toLowerCase().replace(/\s+/g, '_'));
       const fiadoDoc = await fiadoRef.get();
+      const novaCompra = {
+        total,
+        data: new Date().toISOString(),
+        itens: itensVenda.map(i => ({ nome: i.nome, qty: i.qty, preco: i.preco }))
+      };
       if (fiadoDoc.exists) {
         await fiadoRef.update({
           saldo: firebase.firestore.FieldValue.increment(total),
           ultimaCompra: firebase.firestore.FieldValue.serverTimestamp(),
-          compras: firebase.firestore.FieldValue.arrayUnion({ total, data: new Date().toISOString() })
+          compras: firebase.firestore.FieldValue.arrayUnion(novaCompra)
         });
       } else {
         await fiadoRef.set({
           nome: cliente,
           saldo: total,
           ultimaCompra: firebase.firestore.FieldValue.serverTimestamp(),
-          compras: [{ total, data: new Date().toISOString() }]
+          compras: [novaCompra]
         });
       }
     }
@@ -2112,8 +2117,17 @@ async function abrirFiado(id) {
   const lista = (fiadoClienteAtual.compras || []).slice(-5).reverse();
   document.getElementById('fiado-detalhes-lista').innerHTML = `
     <p><strong>Saldo devedor:</strong> <span style="color:var(--danger)">${formatBRL(fiadoClienteAtual.saldo)}</span></p>
-    <div class="mt-8"><strong>Últimas compras:</strong></div>
-    ${lista.map(c => `<div class="resumo-row"><span>${c.data ? new Date(c.data).toLocaleDateString('pt-BR') : '—'}</span><span>${formatBRL(c.total)}</span></div>`).join('')}
+    <div class="mt-8" style="margin-bottom:6px"><strong>Últimas compras:</strong></div>
+    ${lista.map(c => {
+      const dataStr = c.data ? new Date(c.data).toLocaleDateString('pt-BR') : '—';
+      const itensHtml = (c.itens && c.itens.length)
+        ? c.itens.map(i => `<div style="font-size:12px;color:var(--gray-600);padding-left:10px">• ${i.qty}x ${i.nome} – ${formatBRL(i.preco * i.qty)}</div>`).join('')
+        : '';
+      return `<div style="border:1px solid var(--gray-200);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;font-weight:600;font-size:13px"><span>${dataStr}</span><span style="color:var(--danger)">${formatBRL(c.total)}</span></div>
+        ${itensHtml}
+      </div>`;
+    }).join('')}
   `;
   document.getElementById('fiado-pagamento').value = '';
   document.getElementById('modal-fiado').classList.remove('hidden');
@@ -2202,7 +2216,13 @@ function gerarEImprimirCupomFiado(f) {
   html += `<div style="font-weight:bold;font-size:11px">ÚLTIMAS COMPRAS:</div>`;
   compras.forEach(c => {
     const d = c.data ? new Date(c.data).toLocaleDateString('pt-BR') : '—';
-    html += `<div style="display:flex;justify-content:space-between"><span>${d}</span><span>${(c.total||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</span></div>`;
+    html += `<div style="display:flex;justify-content:space-between;font-weight:bold"><span>${d}</span><span>${(c.total||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</span></div>`;
+    if (c.itens && c.itens.length) {
+      c.itens.forEach(i => {
+        const nomeCurto = (i.nome||'').length > 20 ? (i.nome||'').substring(0,20) : (i.nome||'');
+        html += `<div style="font-size:11px;color:#555;padding-left:8px">${i.qty}x ${nomeCurto} – ${(i.preco*i.qty||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</div>`;
+      });
+    }
   });
   html += `<div>${l}</div>`;
   html += `<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px"><span>SALDO DEVEDOR</span><span>${(f.saldo||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</span></div>`;
