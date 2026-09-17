@@ -699,6 +699,14 @@ input:-webkit-autofill:active {
               <option value="fiado">Fiado</option>
             </select>
           </div>
+          <div class="form-group" id="troco-row">
+            <label>Valor Recebido do Cliente</label>
+            <input type="number" id="venda-valor-recebido" placeholder="0,00" step="0.01" min="0" oninput="calcularTroco()"/>
+            <div class="resumo-row" style="margin-top:6px">
+              <span>Troco</span>
+              <span id="resumo-troco" style="font-weight:700">R$ 0,00</span>
+            </div>
+          </div>
           <div class="form-group" id="cliente-row" style="position:relative">
             <label>Nome do Cliente (opcional)</label>
             <input type="text" id="venda-cliente" placeholder="Nome do cliente..." autocomplete="off" oninput="buscaClienteDinamica()" onfocus="buscaClienteDinamica()"/>
@@ -796,12 +804,14 @@ input:-webkit-autofill:active {
                   <th>Itens</th>
                   <th>Pagamento</th>
                   <th>Total</th>
+                  <th>Recebido</th>
+                  <th>Troco</th>
                   <th>Obs.</th>
                   <th>Ações</th>
                 </tr>
               </thead>
               <tbody id="vendidos-hoje-tbody">
-                <tr><td colspan="7" class="empty-text">Carregando...</td></tr>
+                <tr><td colspan="9" class="empty-text">Carregando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -821,12 +831,14 @@ input:-webkit-autofill:active {
                   <th>Itens</th>
                   <th>Pagamento</th>
                   <th>Total</th>
+                  <th>Recebido</th>
+                  <th>Troco</th>
                   <th>Obs.</th>
                   <th>Ações</th>
                 </tr>
               </thead>
               <tbody id="vendidos-semana-tbody">
-                <tr><td colspan="7" class="empty-text">Carregando...</td></tr>
+                <tr><td colspan="9" class="empty-text">Carregando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -846,12 +858,14 @@ input:-webkit-autofill:active {
                   <th>Itens</th>
                   <th>Pagamento</th>
                   <th>Total</th>
+                  <th>Recebido</th>
+                  <th>Troco</th>
                   <th>Obs.</th>
                   <th>Ações</th>
                 </tr>
               </thead>
               <tbody id="vendidos-mes-tbody">
-                <tr><td colspan="7" class="empty-text">Carregando...</td></tr>
+                <tr><td colspan="9" class="empty-text">Carregando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -1111,12 +1125,14 @@ input:-webkit-autofill:active {
                 <th>Cliente</th>
                 <th>Pagamento</th>
                 <th>Total</th>
+                <th>Recebido</th>
+                <th>Troco</th>
                 <th>Lucro</th>
                 <th>Obs.</th>
               </tr>
             </thead>
             <tbody id="rel-tbody">
-              <tr><td colspan="6" class="empty-text">Nenhuma venda hoje</td></tr>
+              <tr><td colspan="8" class="empty-text">Nenhuma venda hoje</td></tr>
             </tbody>
           </table>
         </div>
@@ -2206,12 +2222,30 @@ function calcularTotal() {
   document.getElementById('resumo-subtotal').textContent = formatBRL(subtotal);
   document.getElementById('resumo-total').textContent = formatBRL(total);
   document.getElementById('resumo-lucro').textContent = formatBRL(lucro);
+  calcularTroco();
+}
+
+function calcularTroco() {
+  const totalTexto = document.getElementById('resumo-total').textContent;
+  const total = parseFloat(totalTexto.replace('R$', '').replace(/\./g, '').replace(',', '.')) || 0;
+  const recebido = parseFloat(document.getElementById('venda-valor-recebido').value) || 0;
+  const troco = recebido - total;
+  document.getElementById('resumo-troco').textContent = formatBRL(troco > 0 ? troco : 0);
 }
 
 function toggleCliente() {
   const pag = document.getElementById('venda-pagamento').value;
   document.getElementById('cliente-row').querySelector('label').textContent =
     pag === 'fiado' ? 'Nome do Cliente (obrigatório)' : 'Nome do Cliente (opcional)';
+
+  const trocoRow = document.getElementById('troco-row');
+  if (pag === 'dinheiro') {
+    trocoRow.classList.remove('hidden');
+  } else {
+    trocoRow.classList.add('hidden');
+    document.getElementById('venda-valor-recebido').value = '';
+    document.getElementById('resumo-troco').textContent = 'R$ 0,00';
+  }
 }
 
 // Monitorar checkbox para exibir aviso
@@ -2271,6 +2305,15 @@ async function finalizarVenda() {
   const total = Math.max(subtotal - desconto, 0);
   const lucro = total - custo;
 
+  let valorRecebido = 0;
+  let troco = 0;
+  if (pag === 'dinheiro') {
+    valorRecebido = parseFloat(document.getElementById('venda-valor-recebido').value) || 0;
+    if (valorRecebido <= 0) { vendaEmAndamento = false; showToast('Informe o valor recebido do cliente.'); return; }
+    if (valorRecebido < total) { vendaEmAndamento = false; showToast('Valor recebido é menor que o total da venda.'); return; }
+    troco = valorRecebido - total;
+  }
+
   const venda = {
     itens: itensVenda,
     subtotal,
@@ -2278,6 +2321,8 @@ async function finalizarVenda() {
     total,
     lucro,
     pagamento: pag,
+    valorRecebido: pag === 'dinheiro' ? valorRecebido : null,
+    troco: pag === 'dinheiro' ? troco : null,
     cliente: cliente || null,
     vendedor: currentUserData?.nome || 'Desconhecido',
     litrinho,
@@ -2372,9 +2417,14 @@ async function finalizarVenda() {
       }
     }
 
-    ultimaVenda = { itens: [...itensVenda], subtotal, desconto, total, lucro, pagamento: pag, cliente: cliente || null, vendedor: currentUserData?.nome || '', hora: new Date(), litrinho, cooler, engradado, qtdLitrinho, qtdCooler, qtdEngradado };
+    ultimaVenda = { itens: [...itensVenda], subtotal, desconto, total, lucro, pagamento: pag, valorRecebido: pag === 'dinheiro' ? valorRecebido : null, troco: pag === 'dinheiro' ? troco : null, cliente: cliente || null, vendedor: currentUserData?.nome || '', hora: new Date(), litrinho, cooler, engradado, qtdLitrinho, qtdCooler, qtdEngradado };
     document.getElementById('sucesso-titulo').textContent = 'Venda realizada!';
-    document.getElementById('sucesso-msg').textContent = `Total: ${formatBRL(total)} | ${pag.replace(/_/g,' ')}${cliente ? ' – ' + cliente : ''}${litrinho || cooler || engradado ? ' | 🍺/🧊/📦 Entrega registrada' : ''}`;
+    let msgSucesso = `Total: ${formatBRL(total)} | ${pag.replace(/_/g,' ')}${cliente ? ' – ' + cliente : ''}`;
+    if (pag === 'dinheiro') {
+      msgSucesso += ` | Recebido: ${formatBRL(valorRecebido)} | Troco: ${formatBRL(troco)}`;
+    }
+    msgSucesso += `${litrinho || cooler || engradado ? ' | 🍺/🧊/📦 Entrega registrada' : ''}`;
+    document.getElementById('sucesso-msg').textContent = msgSucesso;
     document.getElementById('modal-sucesso').classList.remove('hidden');
     limparVenda();
     vendaEmAndamento = false;
@@ -2397,6 +2447,8 @@ function limparVenda() {
   document.getElementById('desc-valor').value = '';
   document.getElementById('desc-pct').value = '';
   document.getElementById('venda-pagamento').value = 'dinheiro';
+  document.getElementById('venda-valor-recebido').value = '';
+  document.getElementById('resumo-troco').textContent = 'R$ 0,00';
   document.getElementById('produto-encontrado').classList.add('hidden');
   document.getElementById('check-litrinho').checked = false;
   document.getElementById('check-cooler').checked = false;
@@ -2411,6 +2463,7 @@ function limparVenda() {
   if (cooWrap) cooWrap.style.display = 'none';
   if (engWrap) engWrap.style.display = 'none';
   document.getElementById('checklist-aviso').style.display = 'none';
+  toggleCliente();
   salvarEstadoVendaAtual();
   renderizarAbasVenda();
 }
@@ -2507,7 +2560,7 @@ function renderizarTabelaVendidos(snap, tbodyId, mostrarData) {
   const pags = { dinheiro:'Dinheiro', pix:'PIX', cartao_debito:'Cartão Débito', cartao_credito:'Cartão Crédito', app:'APP', fiado:'Fiado' };
 
   if (snap.empty) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty-text">Nenhuma venda encontrada</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-text">Nenhuma venda encontrada</td></tr>`;
     return;
   }
 
@@ -2526,6 +2579,8 @@ function renderizarTabelaVendidos(snap, tbodyId, mostrarData) {
     const itensStr = (v.itens || []).map(i => `${i.nome} x${i.qty}`).join(', ');
     const obs = [v.litrinho ? '🍺' : '', v.cooler ? '🧊' : '', v.engradado ? '📦' : ''].filter(Boolean).join(' ');
     const pagLabel = pags[v.pagamento] || (v.pagamento||'').replace(/_/g,' ');
+    const recebidoStr = v.pagamento === 'dinheiro' && v.valorRecebido != null ? formatBRL(v.valorRecebido) : '—';
+    const trocoStr = v.pagamento === 'dinheiro' && v.troco != null ? formatBRL(v.troco) : '—';
 
     return `<tr>
       <td>${horaStr}</td>
@@ -2533,6 +2588,8 @@ function renderizarTabelaVendidos(snap, tbodyId, mostrarData) {
       <td data-label="Itens" style="font-size:12px;color:var(--gray-600);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${itensStr}">${itensStr || '—'}</td>
       <td data-label="Pagamento"><span class="badge badge-blue">${pagLabel}</span></td>
       <td data-label="Total" style="font-weight:700">${formatBRL(v.total || 0)}</td>
+      <td data-label="Recebido">${recebidoStr}</td>
+      <td data-label="Troco" title="Valor apenas informativo — não soma no total">${trocoStr}</td>
       <td data-label="Obs.">${obs || '—'}</td>
       <td class="actions-cell">
         <button class="btn btn-sm btn-outline" onclick="reimprimirVenda('${d.id}')">🖨️</button>
@@ -3057,11 +3114,15 @@ async function carregarRelatorios() {
       }
     }
     const obs = [v.litrinho ? '🍺 Litrinho' : '', v.cooler ? '🧊 Cooler' : '', v.engradado ? '📦 Engradado' : ''].filter(Boolean).join(', ');
+    const recebidoStr = v.pagamento === 'dinheiro' && v.valorRecebido != null ? formatBRL(v.valorRecebido) : '—';
+    const trocoStr = v.pagamento === 'dinheiro' && v.troco != null ? formatBRL(v.troco) : '—';
     rows.push(`<tr>
       <td>${horaStr}</td>
       <td>${v.cliente || '—'}</td>
       <td>${pags[v.pagamento] || (v.pagamento||'').replace(/_/g,' ')}</td>
       <td>${formatBRL(v.total || 0)}</td>
+      <td>${recebidoStr}</td>
+      <td>${trocoStr}</td>
       <td style="color:var(--success)">${formatBRL(v.lucro || 0)}</td>
       <td>${obs || '—'}</td>
     </tr>`);
@@ -3070,7 +3131,7 @@ async function carregarRelatorios() {
   document.getElementById('rel-total').textContent = formatBRL(totalVendas);
   document.getElementById('rel-lucro').textContent = formatBRL(totalLucro);
   document.getElementById('rel-qtd').textContent = rows.length;
-  document.getElementById('rel-tbody').innerHTML = rows.join('') || '<tr><td colspan="6" class="empty-text">Nenhuma venda hoje</td></tr>';
+  document.getElementById('rel-tbody').innerHTML = rows.join('') || '<tr><td colspan="8" class="empty-text">Nenhuma venda hoje</td></tr>';
 
   const formasRows = Object.entries(pags).map(([key, label]) => `<tr>
     <td>${label}</td>
@@ -3182,13 +3243,15 @@ async function exportarExcel() {
   const ini = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
   const fim = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + 1);
   const snap = await db.collection('vendas').where('criadoEm', '>=', firebase.firestore.Timestamp.fromDate(ini)).where('criadoEm', '<', firebase.firestore.Timestamp.fromDate(fim)).get();
-  const dados = [['Horário', 'Cliente', 'Pagamento', 'Total', 'Lucro', 'Itens', 'Obs']];
+  const dados = [['Horário', 'Cliente', 'Pagamento', 'Total', 'Recebido', 'Troco', 'Lucro', 'Itens', 'Obs']];
   snap.forEach(d => {
     const v = d.data();
     const hora = v.criadoEm?.toDate?.() ? v.criadoEm.toDate().toLocaleTimeString('pt-BR') : '';
     const itens = (v.itens || []).map(i => `${i.nome} x${i.qty}`).join(', ');
     const obs2 = [v.litrinho ? 'Litrinho' : '', v.cooler ? 'Cooler' : '', v.engradado ? 'Engradado' : ''].filter(Boolean).join(', ');
-    dados.push([hora, v.cliente || '', v.pagamento || '', v.total || 0, v.lucro || 0, itens, obs2]);
+    const recebido = v.pagamento === 'dinheiro' && v.valorRecebido != null ? v.valorRecebido : '';
+    const troco = v.pagamento === 'dinheiro' && v.troco != null ? v.troco : '';
+    dados.push([hora, v.cliente || '', v.pagamento || '', v.total || 0, recebido, troco, v.lucro || 0, itens, obs2]);
   });
   const ws = XLSX.utils.aoa_to_sheet(dados);
   const wb = XLSX.utils.book_new();
@@ -3381,13 +3444,15 @@ async function exportarExcelMes() {
     .where('criadoEm', '>=', firebase.firestore.Timestamp.fromDate(ini))
     .where('criadoEm', '<', firebase.firestore.Timestamp.fromDate(fim)).get();
 
-  const dados = [['Data/Hora', 'Cliente', 'Pagamento', 'Total', 'Lucro', 'Itens', 'Obs']];
+  const dados = [['Data/Hora', 'Cliente', 'Pagamento', 'Total', 'Recebido', 'Troco', 'Lucro', 'Itens', 'Obs']];
   snap.forEach(d => {
     const v = d.data();
     const dataHora = v.criadoEm?.toDate?.() ? v.criadoEm.toDate().toLocaleString('pt-BR') : '';
     const itens = (v.itens || []).map(i => `${i.nome} x${i.qty}`).join(', ');
     const obs2 = [v.litrinho ? 'Litrinho' : '', v.cooler ? 'Cooler' : '', v.engradado ? 'Engradado' : ''].filter(Boolean).join(', ');
-    dados.push([dataHora, v.cliente || '', v.pagamento || '', v.total || 0, v.lucro || 0, itens, obs2]);
+    const recebido = v.pagamento === 'dinheiro' && v.valorRecebido != null ? v.valorRecebido : '';
+    const troco = v.pagamento === 'dinheiro' && v.troco != null ? v.troco : '';
+    dados.push([dataHora, v.cliente || '', v.pagamento || '', v.total || 0, recebido, troco, v.lucro || 0, itens, obs2]);
   });
   const ws = XLSX.utils.aoa_to_sheet(dados);
   const wb = XLSX.utils.book_new();
@@ -3789,6 +3854,10 @@ function gerarHtmlCupom(v) {
   if (v.desconto > 0) html += `<div style="display:flex;justify-content:space-between"><span>Desconto</span><span>- ${formatBRL(v.desconto)}</span></div>`;
   html += `<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px;margin-top:4px"><span>TOTAL</span><span>${formatBRL(v.total)}</span></div>`;
   html += `<div style="display:flex;justify-content:space-between"><span>Pagamento</span><span>${pags[v.pagamento] || v.pagamento}</span></div>`;
+  if (v.pagamento === 'dinheiro' && v.valorRecebido != null) {
+    html += `<div style="display:flex;justify-content:space-between"><span>Valor Recebido</span><span>${formatBRL(v.valorRecebido)}</span></div>`;
+    html += `<div style="display:flex;justify-content:space-between;font-weight:bold"><span>Troco</span><span>${formatBRL(v.troco || 0)}</span></div>`;
+  }
   html += `</div>`;
   html += `<div>${L}</div>`;
   html += `<div style="font-size:11px">${cfg.rodape || 'Obrigado pela preferência!'}</div>`;
@@ -3820,5 +3889,7 @@ function showToast(msg) {
   toastTimer = setTimeout(() => el.classList.add('hidden'), 3500);
 }
 </script>
+
+
 </body>
-</html>
+</html> 
